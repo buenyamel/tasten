@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasten Overlay</title>
+<!--
+  Tasten-Liste fuer OBS / TikTok LIVE Studio. Hintergrund durchsichtig.
+  Zeigt alle ?alle= Sekunden (Standard 60) zwei Seiten fuer je ?seite= Sekunden (Standard 15), dann wieder weg.
+  ?test=1 zeigt die Liste sofort und immer wieder ohne Pause (zum Einstellen in OBS).
+  Woerter muessen zu config.json "controller" passen (siehe Obsidian "GTA 6 Chat-Steuerung Vorlage").
+-->
+<style>
+  :root {
+    --text: #ffffff;
+    --leise: #c9c3e6;
+    --karte: rgba(14, 10, 30, 0.80);
+    --zeile: rgba(14, 10, 30, 0.80);
+    --rand: rgba(255, 255, 255, 0.12);
+    --twitch: #a970ff;
+    --tiktok: #ff2d6f;
+    --tiktok2: #25f4ee;
+    --gold: #ffd84d;
+    --kreuz: #7aa7ff;
+    --kreis: #ff6b6b;
+    --dreieck: #3fe0a5;
+    --viereck: #ff8ad8;
+  }
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Black", "Segoe UI", system-ui, sans-serif;
+    color: var(--text);
+    padding: 4px;
+    width: 330px;
+    max-width: calc(100vw - 8px);
+  }
+  .karte {
+    position: relative;
+    /* kein Kasten aussen herum, nur die Zeilen haben einen Hintergrund */
+    padding: 0 0 8px;
+    opacity: 0; transform: translateY(16px) scale(.97);
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  .karte.an { opacity: 1; transform: none; }
+  .kopf { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .titel {
+    font-size: 21px; letter-spacing: .5px; text-transform: uppercase; margin: 0;
+    background: linear-gradient(90deg, var(--tiktok2), var(--twitch), var(--tiktok));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,.9)) drop-shadow(0 0 6px rgba(0,0,0,.6));
+  }
+  .punkte { margin-left: auto; display: flex; gap: 5px; filter: drop-shadow(0 1px 2px #000); }
+  .punkte i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.22); transition: background .3s, width .3s; }
+  .punkte i.an { width: 20px; border-radius: 4px; background: linear-gradient(90deg, var(--tiktok2), var(--twitch)); }
+
+  .seite { display: none; }
+  .seite.an { display: block; animation: rein .45s ease-out both; }
+  @keyframes rein { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+
+  .raster { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .zeile {
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(var(--zeile), var(--zeile)) padding-box, linear-gradient(120deg, var(--tiktok2), var(--twitch), var(--tiktok)) border-box; border: 2px solid transparent; border-radius: 10px; padding: 4px 7px; min-height: 30px;
+  }
+  .zeile.breit { grid-column: 1 / -1; }
+  .taste { flex: 0 0 auto; width: 30px; height: 30px; display: grid; place-items: center; }
+  .taste svg { width: 30px; height: 30px; display: block; }
+  .pille {
+    flex: 0 0 auto; min-width: 30px; height: 24px; padding: 0 5px; box-sizing: border-box; border-radius: 7px;
+    display: grid; place-items: center; font-size: 13px; color: #120c24;
+    background: linear-gradient(135deg, #ffffff, #d9d3f5);
+  }
+  .wort { font-size: 16px; line-height: 1.15; }
+  .wort small { display: block; font-family: "Segoe UI", system-ui, sans-serif; font-weight: 600; font-size: 12px; color: var(--leise); }
+
+  .gruppe { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center;
+    background: linear-gradient(var(--zeile), var(--zeile)) padding-box, linear-gradient(120deg, var(--tiktok2), var(--twitch), var(--tiktok)) border-box; border: 2px solid transparent; border-radius: 10px; padding: 5px 8px; margin-bottom: 5px; }
+  .gruppe svg { width: 28px; height: 28px; display: block; }
+  .gruppe b { display: block; font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--leise); }
+  .gruppe span { font-size: 15px; line-height: 1.25; }
+
+  .fuss {
+    margin-top: 6px; font-family: "Segoe UI", system-ui, sans-serif; font-weight: 800; font-size: 13px;
+    color: #ffffff; line-height: 1.35;
+    text-shadow: 0 1px 2px #000, 0 0 4px #000, 0 0 8px rgba(0,0,0,.8);
+  }
+  .fuss b { color: var(--gold); }
+  .balken { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 2px; background: rgba(255,255,255,.10); overflow: hidden; }
+  .balken i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--tiktok2), var(--twitch), var(--tiktok)); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .karte, .karte.an { transition: none; transform: none; }
+    .seite.an { animation: none; }
+    .punkte i { transition: none; }
+    .balken { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="karte" id="karte" aria-live="polite">
+  <div class="kopf">
+    <h1 class="titel" id="titel">Steuerung</h1>
+    <div class="punkte"><i class="an"></i><i></i></div>
+  </div>
+
+  <!-- Seite 1: zu Fuss -->
+  <section class="seite an" data-titel="Steuerung">
+    <div class="raster">
+      <div class="zeile breit">
+        <div class="taste"><svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>
+        <div class="wort">links · rechts · vor · zurück</div>
+      </div>
+      <div class="zeile"><div class="taste"><svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="var(--kreuz)" stroke-width="2.4"/><path d="M10 10l10 10M20 10L10 20" stroke="var(--kreuz)" stroke-width="2.8" stroke-linecap="round"/></svg></div><div class="wort">springen</div></div>
+      <div class="zeile"><div class="taste"><svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="var(--viereck)" stroke-width="2.4"/><rect x="9.5" y="9.5" width="11" height="11" rx="1" fill="none" stroke="var(--viereck)" stroke-width="2.6"/></svg></div><div class="wort">schlagen</div></div>
+      <div class="zeile"><div class="taste"><svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="var(--kreis)" stroke-width="2.4"/><circle cx="15" cy="15" r="6" fill="none" stroke="var(--kreis)" stroke-width="2.6"/></svg></div><div class="wort">ducken</div></div>
+      <div class="zeile"><div class="taste"><svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="var(--dreieck)" stroke-width="2.4"/><path d="M15 9l6.5 11h-13z" fill="none" stroke="var(--dreieck)" stroke-width="2.4" stroke-linejoin="round"/></svg></div><div class="wort">einsteigen</div></div>
+      <div class="zeile"><span class="pille">L1</span><div class="wort">ausrüstung</div></div>
+      <div class="zeile"><span class="pille">R1</span><div class="wort">deckung</div></div>
+      <div class="zeile"><span class="pille">L2</span><div class="wort">zielen</div></div>
+      <div class="zeile"><span class="pille">R2</span><div class="wort">schießen</div></div>
+      <div class="zeile"><span class="pille">L3</span><div class="wort">sprinten</div></div>
+      <div class="zeile"><span class="pille">R3</span><div class="wort">umdrehen</div></div>
+    </div>
+    <div class="fuss">Nur das Wort in den Chat schreiben.<br><b>Platz 1</b> alles · <b>Platz 2</b> links/rechts/vor/zurück, springen, ducken · <b>Platz 3</b> springen, sprinten</div>
+  </section>
+
+  <!-- Seite 2: Fahrzeuge und mehr -->
+  <section class="seite" data-titel="Fahrzeuge &amp; mehr">
+    <div class="gruppe">
+      <svg viewBox="0 0 28 28" fill="none" stroke="var(--tiktok2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l2.5-6.5A2 2 0 0 1 8.4 9h11.2a2 2 0 0 1 1.9 1.5L24 17v4H4z"/><circle cx="8.5" cy="21" r="2"/><circle cx="19.5" cy="21" r="2"/></svg>
+      <div><b>Auto &amp; Boot</b><span>gas · bremsen · nitro</span></div>
+    </div>
+    <div class="gruppe">
+      <svg viewBox="0 0 28 28" fill="none" stroke="var(--dreieck)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="18" r="4.5"/><circle cx="21" cy="18" r="4.5"/><path d="M7 18l4-8h7l3 8M11 10l3 8h-7M16 7h3"/></svg>
+      <div><b>Fahrrad</b><span>strampeln · bunny hop · klingel</span></div>
+    </div>
+    <div class="gruppe">
+      <svg viewBox="0 0 28 28" fill="none" stroke="var(--twitch)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15l22-6-3 5-8 2-4 6h-2l1-5-6 1z"/></svg>
+      <div><b>Flugzeug &amp; Heli</b><span>schub</span></div>
+    </div>
+    <div class="gruppe">
+      <svg viewBox="0 0 28 28" fill="none" stroke="var(--kreuz)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c3-3 5-3 8 0s5 3 8 0 4-2 6-1M3 19c3-3 5-3 8 0s5 3 8 0 4-2 6-1"/></svg>
+      <div><b>Schwimmen</b><span>schwimmen · tauchen · auftauchen</span></div>
+    </div>
+    <div class="gruppe">
+      <svg viewBox="0 0 28 28" fill="none" stroke="var(--gold)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a11 8 0 0 1 22 0c-2-1.5-4-1.5-5.5 0-1.8-1.5-3.7-1.5-5.5 0-1.8-1.5-3.7-1.5-5.5 0C7 10.5 5 10.5 3 12z"/><path d="M3 12l11 10 11-10M14 12v10"/></svg>
+      <div><b>Fallschirm</b><span>fallschirm · abschnallen</span></div>
+    </div>
+    <div class="gruppe">
+      <svg viewBox="0 0 28 28" fill="none" stroke="var(--kreis)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V9a2 2 0 0 1 4 0v3M12 12V8a2 2 0 0 1 4 0v4M16 12V9a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-1a6 6 0 0 1-6-6v-3a2 2 0 0 1 3-1.7"/></svg>
+      <div><b>Nahkampf</b><span>schlagen · blocken · ausweichen</span></div>
+    </div>
+    <div class="fuss">Meist nur <b>Platz 1</b> · Mehr Wörter: <b>!tasten</b> <b>!fahren</b></div>
+  </section>
+
+  <div class="balken"><i id="balken"></i></div>
+</div>
+
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  function zahl(name, std, min, max) {
+    var v = Number(q.get(name));
+    if (!isFinite(v) || v <= 0) return std;
+    return Math.min(Math.max(v, min), max);
+  }
+  var test = q.get('test') === '1';
+  var seiteSek = zahl('seite', 15, 3, 60);           // so lange bleibt jede Seite
+  var alleSek = zahl('alle', 60, 10, 3600);           // alle so viele Sekunden kommt die Liste
+  var karte = document.getElementById('karte');
+  var titel = document.getElementById('titel');
+  var balken = document.getElementById('balken');
+  var seiten = Array.prototype.slice.call(document.querySelectorAll('.seite'));
+  var punkte = Array.prototype.slice.call(document.querySelectorAll('.punkte i'));
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ?standbild=1 oder 2: zeigt nur diese Seite, ohne Bewegung und ohne Balken (fuer das Video tasten-liste.webm)
+  var bild = Number(q.get('standbild'));
+  if (bild >= 1 && bild <= seiten.length) {
+    document.querySelector('.balken').style.display = 'none';
+    karte.style.transition = 'none';
+    seiten.forEach(function (s) { s.style.animation = 'none'; });
+    punkte.forEach(function (p) { p.style.transition = 'none'; });
+    still = true;
+    zeigeSeite(bild - 1);
+    karte.classList.add('an');
+    return;
+  }
+
+  function zeigeSeite(i) {
+    seiten.forEach(function (s, n) { s.classList.toggle('an', n === i); });
+    punkte.forEach(function (p, n) { p.classList.toggle('an', n === i); });
+    titel.textContent = seiten[i].getAttribute('data-titel');
+    if (still) return;
+    balken.style.transition = 'none';
+    balken.style.width = '0';
+    void balken.offsetWidth;
+    balken.style.transition = 'width ' + seiteSek + 's linear';
+    balken.style.width = '100%';
+  }
+
+  function runde() {
+    var i = 0;
+    zeigeSeite(0);
+    karte.classList.add('an');
+    var t = setInterval(function () {
+      i++;
+      if (i < seiten.length) { zeigeSeite(i); return; }
+      clearInterval(t);
+      if (test) { runde(); return; }
+      karte.classList.remove('an');
+    }, seiteSek * 1000);
+  }
+
+  // Erste Runde kurz nach dem Laden (dann sieht man in OBS sofort, ob es klappt), danach alle `alleSek` Sekunden.
+  var dauer = seiten.length * seiteSek;
+  if (!test && alleSek < dauer + 2) alleSek = dauer + 2;
+  setTimeout(function () {
+    runde();
+    if (!test) setInterval(runde, alleSek * 1000);
+  }, test ? 0 : 2000);
+})();
+</script>
+</body>
+</html>
